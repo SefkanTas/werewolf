@@ -15,9 +15,11 @@ public class GameManager implements Runnable {
     private Game game;
     private Role turn;
 
+    private ArrayList<Player> playerListForSeer;
     private Map<Player, Integer> voteMap;
-    private Timer werewolvesTimer;
+    private Timer turnTimer;
     private int werewolvesTurnDuration = 30;
+    private int seerTurnDuration = 30;
 
 
     public GameManager(Server server, Game game){
@@ -48,6 +50,9 @@ public class GameManager implements Runnable {
         try {
             if (turn == Role.WEREWOLF){
                 processWerewolvesData(pm, dataReceived);
+            }
+            else if (turn == Role.SEER){
+                processSeerData(pm, dataReceived);
             }
         } catch (NotYourTurnException e) {
             logger.log("processData", pm.getPlayer().getUsername() + " " + e.toString());
@@ -120,36 +125,17 @@ public class GameManager implements Runnable {
         }
     }
 
-    /**
-     * Check si un vote est valide
-     * @param dataReceived
-     * @return
-     * @throws NumberFormatException
-     */
-    private boolean isVoteValid(String dataReceived) throws NumberFormatException{
-        int vote;
-        try{
-            vote = Integer.parseInt(dataReceived);
-        }
-        catch (NumberFormatException e){
-            return false;
-        }
-        if(vote <= 0){
-            return false;
-        }
-        if (turn == Role.WEREWOLF && vote <= game.getInnocentList().size() ){
-            return true;
-        }
-        return false;
-    }
-
     private void nextTurn(){
         if(turn == Role.VILLAGER){
             werewolvesfTurn();
         }
         else if(turn == Role.WEREWOLF){
-            werewolvesTimer.cancel();
-            seersTurn();
+            turnTimer.cancel();
+            seerTurn();
+        }
+        else if(turn == Role.SEER){
+            turnTimer.cancel();
+
         }
     }
 
@@ -159,10 +145,10 @@ public class GameManager implements Runnable {
     private void werewolvesfTurn(){
         turn = Role.WEREWOLF;
         server.sendAll("Le village s'endort et les loups se reveillent...");
-        sendVoteListForWerewolves();
+        sendVoteMenuToWerewolves();
         voteMap = new ConcurrentHashMap<>();
-        werewolvesTimer = new Timer();
-        werewolvesTimer.schedule(new TimerTask() {
+        turnTimer = new Timer();
+        turnTimer.schedule(new TimerTask() {
             @Override
             public void run() {
                 nextTurn();
@@ -171,19 +157,9 @@ public class GameManager implements Runnable {
     }
 
     /**
-     * Initialise le tour des voyantes
-     */
-    private void seersTurn(){
-        turn = Role.SEER;
-        server.sendAll("C'est au tour de la sorciere");
-        sendDataToSeers("Vous pouvez maintenant voir le role du joueur de votre choix");
-        // TODO: 13/01/2020 Ajouter la liste des joueurs, etc...
-    }
-
-    /**
      * Envoie le "menu" de vote à chaque loups-garoups.
      */
-    private void sendVoteListForWerewolves(){
+    private void sendVoteMenuToWerewolves(){
         StringBuilder sb = new StringBuilder();
         sb.append("Tu as " + werewolvesTurnDuration + " secondes pour voter pour tuer un de ces joueurs : \n");
         for (int i = 0; i<game.getInnocentList().size(); i++){
@@ -216,9 +192,87 @@ public class GameManager implements Runnable {
         });
     }
 
-    private void sendDataToSeers(String dataToSend){
-        game.getSeerList().forEach(player -> {
-            server.getPlayerManagerMap().get(player.getUsername()).send(dataToSend);
-        });
+    /**
+     * Initialise le tour des voyantes
+     */
+    private void seerTurn(){
+        turn = Role.SEER;
+        server.sendAll("C'est au tour de la voyante");
+        sendDataToSeer("Vous avez 30 secondes pour regarder le role d'un joueur de votre choix.");
+        sendVoteMenuToSeer();
+        turnTimer = new Timer();
+        turnTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                nextTurn();
+            }
+        }, seerTurnDuration * 1000);
+    }
+
+    private void sendVoteMenuToSeer(){
+        playerListForSeer = game.getPlayerExcept(Role.SEER);
+        StringBuilder sb = new StringBuilder();
+
+        for(int i = 0; i<playerListForSeer.size(); i++){
+            sb.append(i+1)
+                    .append(" : ")
+                    .append(game.getPlayerList().get(i).getUsername())
+                    .append("\n");
+        }
+        sendDataToSeer(sb.toString());
+    }
+
+    private void processSeerData(PlayerManager pm, String dataReceived) throws NotYourTurnException,
+            InvalidVoteException {
+
+        if(pm.getPlayer().getRole() != Role.SEER){
+            throw new NotYourTurnException();
+        }
+
+        if(!isVoteValid(dataReceived)){
+            throw new InvalidVoteException();
+        }
+
+        int voteInt = Integer.parseInt(dataReceived) - 1;
+        Player targetedPlayer = playerListForSeer.get(voteInt);
+        StringBuilder sb = new StringBuilder();
+        sb.append("Le role de ")
+                .append(targetedPlayer.getUsername())
+                .append(" est ")
+                .append(targetedPlayer.getRole())
+                .append(".");
+        pm.send(sb.toString());
+
+        nextTurn();
+    }
+
+    private void sendDataToSeer(String dataToSend){
+        server.getPlayerManagerMap().get(game.getSeer().getUsername()).send(dataToSend);
+    }
+
+    /**
+     * Check si un vote est valide
+     * @param dataReceived
+     * @return
+     * @throws NumberFormatException
+     */
+    private boolean isVoteValid(String dataReceived) throws NumberFormatException{
+        int vote;
+        try{
+            vote = Integer.parseInt(dataReceived);
+        }
+        catch (NumberFormatException e){
+            return false;
+        }
+        if(vote <= 0){
+            return false;
+        }
+        if (turn == Role.WEREWOLF && vote <= game.getInnocentList().size() ){
+            return true;
+        }
+        else if(turn == Role.SEER && vote <= playerListForSeer.size()){
+            return true;
+        }
+            return false;
     }
 }

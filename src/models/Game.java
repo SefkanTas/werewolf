@@ -2,8 +2,11 @@ package models;
 
 import server.PlayerManager;
 
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 public class Game {
     private String gameName;
@@ -19,14 +22,14 @@ public class Game {
     private CopyOnWriteArrayList<Player> playerList;
     private CopyOnWriteArrayList<Player> werewolfList;
     private CopyOnWriteArrayList<Player> villagerList;
-    private CopyOnWriteArrayList<Player> seerList;
-    private CopyOnWriteArrayList<Player> witchList;
     private CopyOnWriteArrayList<Player> innocentList;
+    private Player seer;
+    private Player witch;
 
     public Game(){
         nbPlayers = 4; //7
         nbWerewolves = 2; //2
-        nbSeers = 0; //1
+        nbSeers = 1; //1
         nbWitches = 0; //1
         nbVillagers = nbPlayers - (nbWerewolves + nbSeers + nbWitches);
         nbWerewolvesAlive = nbWerewolves;
@@ -35,8 +38,6 @@ public class Game {
         playerList = new CopyOnWriteArrayList<>();
         werewolfList = new CopyOnWriteArrayList<>();
         villagerList = new CopyOnWriteArrayList<>();
-        seerList = new CopyOnWriteArrayList<>();
-        witchList = new CopyOnWriteArrayList<>();
         innocentList = new CopyOnWriteArrayList<>();
 
         isPlaying = false;
@@ -68,20 +69,20 @@ public class Game {
     private void setRoles(){
         CopyOnWriteArrayList<Player> playerLeft = new CopyOnWriteArrayList<>(playerList);
 
-        setSpecificRole(playerLeft, werewolfList, Role.WEREWOLF, nbWerewolves);
-        setSpecificRole(playerLeft, seerList, Role.SEER, nbSeers);
-        setSpecificRole(playerLeft, witchList, Role.WITCH, nbWitches);
-        setSpecificRole(playerLeft, villagerList, Role.VILLAGER, nbVillagers);
+        setListRole(playerLeft, werewolfList, Role.WEREWOLF, nbWerewolves);
+        seer = setRole(playerLeft, Role.SEER);
+        //setRole(playerLeft, witch, Role.WITCH);
+        setListRole(playerLeft, villagerList, Role.VILLAGER, nbVillagers);
     }
 
     /**
-     * Donne un role aléatoirement aux joueurs de la partie.
-     * @param playerLeft
-     * @param roleList
-     * @param role
-     * @param nbPlayer
+     * Donne un role aléatoirement aux joueurs de la partie pour les rôles ayant plusieurs joueurs.
+     * @param playerLeft la liste des joueurs n'ayant pas de rôle
+     * @param roleList liste de joueurs d'un certain rôle
+     * @param role le rôle a assigner
+     * @param nbPlayer le nombre de joueur nécessaire pour ce rôle
      */
-    private void setSpecificRole( CopyOnWriteArrayList<Player> playerLeft,
+    private void setListRole( CopyOnWriteArrayList<Player> playerLeft,
                                   CopyOnWriteArrayList<Player> roleList, Role role, int nbPlayer){
         int rand;
         for (int i = nbPlayer; i>0; i--){
@@ -93,6 +94,21 @@ public class Game {
             }
             playerLeft.remove(rand);
         }
+    }
+
+    /**
+     * Donne un rôle pour les rôles ne nécessitant qu'un seul joueur
+     * @param playerLeft la liste des joueurs n'ayant pas de rôle
+     * @param role le rôle a assigner
+     */
+    private Player setRole(CopyOnWriteArrayList<Player> playerLeft, Role role){
+        Player p;
+        int rand = (int)(Math.random() * playerLeft.size());
+        p = playerLeft.get(rand);
+        p.setRole(role);
+        innocentList.add(p);
+        playerLeft.remove(rand);
+        return p;
     }
 
     public boolean isPlaying() {
@@ -107,18 +123,25 @@ public class Game {
         return nbPlayers;
     }
 
-    public CopyOnWriteArrayList<Player> getWerewolfList() {
-        return werewolfList;
+    public CopyOnWriteArrayList<Player> getPlayerList() {
+        return playerList;
     }
 
-    public CopyOnWriteArrayList<Player> getSeerList() {
-        return seerList;
+    public CopyOnWriteArrayList<Player> getWerewolfList() {
+        return werewolfList;
     }
 
     public CopyOnWriteArrayList<Player> getInnocentList() {
         return innocentList;
     }
 
+    public Player getSeer() {
+        return seer;
+    }
+
+    public Player getWitch() {
+        return witch;
+    }
 
     public int getNbWerewolvesAlive() {
         return nbWerewolvesAlive;
@@ -126,5 +149,11 @@ public class Game {
 
     public int getNbInnocentAlive() {
         return nbInnocentAlive;
+    }
+
+    public ArrayList<Player> getPlayerExcept(Role role){
+        return (ArrayList<Player>) getPlayerList().stream()
+                .filter(e -> e.getRole() != role)
+                .collect(Collectors.toList());
     }
 }
